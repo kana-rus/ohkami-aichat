@@ -20,6 +20,14 @@ async fn my_worker() -> Ohkami {
     Ohkami::with(fangs, (
         /* in production, `./dist` contents are served by `--assets dist` of `deploy` script in package.json */
 
-        "/hello".GET(api::hello),
+        "/chats"
+            .GET(api::list_chats)
+            .POST(api::create_chat),
+        "/chats/:chat_id"
+            .GET(api::load_messages)
+            .POST(api::post_message)
+            .PATCH(api::set_title),
+        "/messages/:message_id"
+            .PUT(api::update_message),
     ))
 }

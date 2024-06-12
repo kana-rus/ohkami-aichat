@@ -17,9 +17,9 @@ opt-level = "s"
 [dependencies]
 console_error_panic_hook = { version = "0.1" }
 ohkami                   = { git = "https://github.com/kana-rus/ohkami.git", features = ["rt_worker", "sse"] }
-worker                   = { version = "0.3" }
+worker                   = { version = "0.3",  features = ["d1"] }
 yew                      = { version = "0.21", features = ["csr"] }
 web-sys                  = { version = "0.3",  features = ["Crypto"] }
 thiserror                = { version = "1.0" }
-reqwest                  = { version = "0.12", features = ["json"] }
+reqwest                  = { version = "0.12", features = ["json", "stream"] }
 wasm-bindgen-futures     = { version = "0.4" }

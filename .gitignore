@@ -11,3 +11,4 @@ build/
 # wrangler files
 .wrangler
 .dev.vars
+wrangler.toml
