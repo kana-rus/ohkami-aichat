@@ -1,12 +1,12 @@
 pub mod errors;
 pub mod utils;
 
-use self::errors::ServerError;
+use errors::ServerError;
 use crate::Bindings;
-use crate::models::{Chat, CreateChat, Message, PostMessage, SetTitle};
-use crate::models::openai::Role;
+use crate::models::{openai, Chat, CreateChat, Message, MessageChunk, PostMessage, SetTitle};
 use ohkami::typed::{status, DataStream};
 use ohkami::serde::Deserialize;
+use ohkami::utils::StreamExt;
 use web_sys::{js_sys, wasm_bindgen::JsCast, WorkerGlobalScope};
 
 
@@ -38,7 +38,7 @@ pub async fn create_chat(
             .prepare("INSERT INTO messages (chat_id, role_id, content) VALUES (?1, ?2, ?3)")
             .bind(&[
                 (&id).into(),
-                (Role::system.id()).into(),
+                (openai::Role::system.as_id()).into(),
                 req.system_instruction.unwrap().into()
             ])?
         )
@@ -51,28 +51,8 @@ pub async fn create_chat(
 pub async fn load_messages(chat_id: &str,
     b: Bindings,
 ) -> Result<Vec<Message>, ServerError> {
-    let records = {
-        #[derive(Deserialize)]
-        struct MessageRecord { id: usize, role_id: u8, content: String }
-
-        b.DB.prepare("SELECT id, role_id, content FROM messages WHERE chat_id = ?")
-            .bind(&[chat_id.into()])?
-            .all().await?.results::<MessageRecord>()?
-    };
-
-    Ok(records.into_iter().map(|r| Message {
-        id:      r.id,
-        role:    Role::from_id(r.role_id),
-        content: r.content,
-    }).collect())
-}
-
-#[worker::send]
-pub async fn post_message(chat_id: &str,
-    b: Bindings,
-    req: PostMessage,
-) -> Result<DataStream<String>, ServerError> {
-    todo!()
+    let messages = Message::load_all(chat_id, &b.DB).await?;
+    Ok(messages)
 }
 
 #[worker::send]
@@ -80,13 +60,105 @@ pub async fn set_title(chat_id: &str,
     b: Bindings,
     req: SetTitle,
 ) -> Result<(), ServerError> {
-    
+    b.DB.prepare("UPDATE chats SET title = ?1 WHERE id = ?2")
+        .bind(&[req.0.into(), chat_id.into()])?
+        .run().await?;
 
+    Ok(())
+}
+
+#[worker::send]
+pub async fn post_message(chat_id: &str,
+    b: Bindings,
+    req: PostMessage,
+    ctx: &worker::Context,
+) -> Result<DataStream<MessageChunk, ServerError>, ServerError> {
+    b.DB.prepare("INSERT INTO messages (chat_id, role_id, content) VALUES (?1, ?2, ?3)")
+        .bind(&[chat_id.into(), openai::Role::user.as_id().into(), req.content.into()])?
+        .run().await?;
+
+    let gpt_response = reqwest::Client::new()
+        .post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(b.OPENAI_API_KEY)
+        .json(&openai::ChatCompletions {
+            model:    "gpt-4o",
+            stream:   true,
+            messages: Message::load_all(chat_id, &b.DB).await?.into_iter()
+                .map(|m| openai::ChatMessage {
+                    role:    m.role,
+                    content: m.content,
+                })
+                .collect(),
+        })
+        .send().await?
+        .bytes_stream();
+
+    let response_buffer = utils::ChatResponseBuffer::new();
+
+    let stream = DataStream::from_stream(
+        gpt_response.map({
+            let response_buffer = response_buffer.clone();
+
+            move |chunk| {
+                let [choice] = openai::ChatCompletionChunk::from_raw(&chunk?)
+                    .map_err(|e| ServerError::Deserialize { msg: e.to_string() })?
+                    .choices;
+
+                let message_chunk = MessageChunk {
+                    diff:      choice.delta.content.unwrap_or_else(String::new),
+                    finish_by: choice.finish_reason,
+                };
+
+                response_buffer.push(&message_chunk.diff);
+                if let Some(reason) = message_chunk.finish_by {
+                    response_buffer.finish(reason)
+                }
+
+                Ok(message_chunk)
+            }
+        })
+    );
+
+    ctx.wait_until({
+        let response_buffer = response_buffer.clone();
+        let chat_id: String = chat_id.into();
+
+        async move {
+            let (content, finish_reason) = response_buffer.complete().await;
+            if let Err(err) = b.DB
+                .prepare("
+                    INSERT INTO messages (
+                        chat_id, role_id, content, finish_reason_id
+                    ) VALUES (
+                        ?1,      ?2,      ?3,      ?4
+                    )
+                ")
+                .bind(&[
+                    chat_id.into(),
+                    openai::Role::assistant.as_id().into(),
+                    content.into(),
+                    finish_reason.as_id().into(),
+                ]).unwrap()
+                .run().await
+            {
+                worker::console_error!("Failed to save full GPT response: {err}");
+            }
+        }
+    });
+
+    Ok(stream)
+}
+
+#[worker::send]
+pub async fn rewrite_message(message_id: &str,
+    b: Bindings,
+    req: PostMessage,
+) -> Result<DataStream<String>, ServerError> {
     todo!()
 }
 
 #[worker::send]
-pub async fn update_message(message_id: &str,
+pub async fn regenerate_response(message_id: &str,
     b: Bindings,
     req: PostMessage,
 ) -> Result<DataStream<String>, ServerError> {

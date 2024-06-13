@@ -27,7 +27,9 @@ async fn my_worker() -> Ohkami {
             .GET(api::load_messages)
             .POST(api::post_message)
             .PATCH(api::set_title),
+        "/chats/:chat_id/regenerate"
+            .GET(api::regenerate_response),
         "/messages/:message_id"
-            .PUT(api::update_message),
+            .PUT(api::rewrite_message),
     ))
 }

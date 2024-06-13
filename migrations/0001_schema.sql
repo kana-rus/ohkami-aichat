@@ -6,10 +6,11 @@ CREATE TABLE IF NOT EXISTS chats (
 );
 
 CREATE TABLE IF NOT EXISTS messages (
-    id      INTEGER NOT NULL PRIMARY KEY,
-    chat_id TEXT    NOT NULL,
-    role_id INTEGER NOT NULL, -- 0: "system", 1: "user", 2: "assistant"
-    content TEXT    NOT NULL,
+    id               INTEGER NOT NULL PRIMARY KEY,
+    chat_id          TEXT    NOT NULL,
+    role_id          INTEGER NOT NULL, -- 0: "system", 1: "user", 2: "assistant"
+    content          TEXT    NOT NULL,
+    finish_reason_id INTEGER, -- 0: "stop", 1: "length", 2: "content_filter"
 
     FOREIGN KEY chat_id REFERENCES chats (id)
 );

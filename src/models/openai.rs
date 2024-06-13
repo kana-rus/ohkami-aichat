@@ -16,12 +16,10 @@ pub struct ChatMessage {
 
 #[Payload(JSON/DS)]
 pub struct ChatCompletionChunk {
-    pub id:      String,
     pub choices: [ChatCompletionChoice; 1],
 }
 #[derive(Deserialize, Serialize)]
 pub struct ChatCompletionChoice {
-    pub index:         usize,
     pub delta:         ChatCompletionDelta,
     pub finish_reason: Option<ChatCompletionFinishReason>,
 }
@@ -30,7 +28,7 @@ pub struct ChatCompletionDelta {
     pub role:    Option<Role>,
     pub content: Option<String>,
 }
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum ChatCompletionFinishReason {
     stop,
@@ -38,13 +36,20 @@ pub enum ChatCompletionFinishReason {
     content_filter,
 }
 const _: () = {
+    impl ChatCompletionFinishReason {
+        pub const fn as_id(self) -> u8 {
+            self as _
+        }
+    }
+};
+const _: () = {
     use ohkami::serde::{ser, de};
     use ohkami::typed::PayloadType as _;
 
     impl ChatCompletionChunk {
         #[inline]
-        pub fn from_raw(chunk: &str) -> Result<Self, impl de::Error + '_> {
-            JSON::parse(chunk.as_bytes())
+        pub fn from_raw(chunk: &[u8]) -> Result<Self, impl de::Error + '_> {
+            JSON::parse(chunk)
         }
         #[inline]
         pub fn into_raw(&self) -> Result<String, impl ser::Error + '_> {
@@ -64,13 +69,13 @@ pub enum Role {
 }
 const _: () = {
     impl Role {
-        pub const fn id(self) -> u8 {
+        pub const fn as_id(self) -> u8 {
             self as _
         }
         pub const fn from_id(id: u8) -> Self {
             match id {
-                0..2 => unsafe {std::mem::transmute(id)},
-                _ => panic!("")
+                0..3 => unsafe {std::mem::transmute(id)},
+                _ => panic!("Invalid role id")
             }
         }
     }
