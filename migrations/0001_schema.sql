@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS messages (
     role_id          INTEGER NOT NULL, -- 0: "system", 1: "user", 2: "assistant"
     content          TEXT    NOT NULL,
     finish_reason_id INTEGER, -- 0: "stop", 1: "length", 2: "content_filter"
+    branches         TEXT    NOT NULL, -- (:＜branch head id＞)*
 
     FOREIGN KEY chat_id REFERENCES chats (id)
 );

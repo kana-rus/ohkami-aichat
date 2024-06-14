@@ -30,6 +30,6 @@ async fn my_worker() -> Ohkami {
         "/chats/:chat_id/regenerate"
             .GET(api::regenerate_response),
         "/messages/:message_id"
-            .PUT(api::rewrite_message),
+            .POST(api::create_new_branch),
     ))
 }

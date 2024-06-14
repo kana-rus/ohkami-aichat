@@ -49,6 +49,36 @@ pub struct PostMessage {
 #[Payload(Text/SD)]
 pub struct SetTitle(pub String);
 
+pub struct BranchID([u8; 6]);
+const _: () = {
+    impl BranchID {
+        pub fn new() -> Self {
+            use web_sys::{js_sys, wasm_bindgen::JsCast, WorkerGlobalScope};
+            
+            let mut bytes = <[u8; 6]>::default();
+            WorkerGlobalScope::unchecked_from_js(js_sys::global().into())
+                .crypto().unwrap()
+                .get_random_values_with_u8_array(&mut bytes).unwrap();
+        
+            Self(bytes)
+        }
+    }
+
+    impl std::ops::Deref for BranchID {
+        type Target = str;
+        fn deref(&self) -> &Self::Target {
+            /* SAFETY: UUID consists of asciis */
+            unsafe {std::str::from_utf8_unchecked(&self.0)}
+        }
+    }
+};
+
+#[derive(ohkami::serde::Serialize)]
+pub enum MessageChunk_ {
+    ID(usize),
+    Diff(String),
+    Finish(openai::ChatCompletionFinishReason),
+}
 #[derive(ohkami::serde::Serialize)]
 pub struct MessageChunk {
     pub diff:      String,

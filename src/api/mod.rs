@@ -38,10 +38,10 @@ pub async fn create_chat(
             .prepare("INSERT INTO messages (chat_id, role_id, content) VALUES (?1, ?2, ?3)")
             .bind(&[
                 (&id).into(),
-                (openai::Role::system.as_id()).into(),
+                openai::Role::system.as_id().into(),
                 req.system_instruction.unwrap().into()
             ])?
-        )
+        ),
     ].into_iter().flatten().collect()).await?;
 
     Ok(status::Created(Chat { id, title: req.title }))
@@ -150,7 +150,7 @@ pub async fn post_message(chat_id: &str,
 }
 
 #[worker::send]
-pub async fn rewrite_message(message_id: &str,
+pub async fn create_new_branch(message_id: &str,
     b: Bindings,
     req: PostMessage,
 ) -> Result<DataStream<String>, ServerError> {
