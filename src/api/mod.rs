@@ -3,7 +3,7 @@ pub mod utils;
 
 use errors::ServerError;
 use crate::Bindings;
-use crate::models::{openai, Chat, CreateChat, Message, MessageChunk, PostMessage, SetTitle};
+use crate::models::{openai, IDObject, Chat, CreateChat, Message, ResponseChunk, PostMessage, SetTitle, LoadMessagesQuery};
 use ohkami::typed::{status, DataStream};
 use ohkami::serde::Deserialize;
 use ohkami::utils::StreamExt;
@@ -50,9 +50,11 @@ pub async fn create_chat(
 #[worker::send]
 pub async fn load_messages(chat_id: &str,
     b: Bindings,
+    q: Option<LoadMessagesQuery>,
 ) -> Result<Vec<Message>, ServerError> {
-    let messages = Message::load_all(chat_id, &b.DB).await?;
-    Ok(messages)
+    // let messages = Message::load_all(chat_id, &b.DB).await?;
+    // Ok(messages)
+    todo!()
 }
 
 #[worker::send]
@@ -72,10 +74,24 @@ pub async fn post_message(chat_id: &str,
     b: Bindings,
     req: PostMessage,
     ctx: &worker::Context,
-) -> Result<DataStream<MessageChunk, ServerError>, ServerError> {
-    b.DB.prepare("INSERT INTO messages (chat_id, role_id, content) VALUES (?1, ?2, ?3)")
-        .bind(&[chat_id.into(), openai::Role::user.as_id().into(), req.content.into()])?
-        .run().await?;
+) -> Result<DataStream<ResponseChunk, ServerError>, ServerError> {
+    let [message_id, response_id] = {
+        let ids = b.DB
+            .prepare(
+                "INSERT INTO messages (chat_id, role_id, content)
+                VALUES (?1, ?2, ?3), (?4, ?5, ?6)
+                RETURNING id")
+            .bind(&[
+                chat_id.into(), openai::Role::user.as_id().into(), req.content.into(),
+                chat_id.into(), openai::Role::assistant.as_id().into(), "".into()
+            ])?
+            .all().await?.results::<IDObject>()?;
+
+        let mut ids = TryInto::<[IDObject; 2]>::try_into(ids).unwrap()
+            .map(|IDObject { id }| id);
+        ids.sort();
+        ids
+    };
 
     let gpt_response = reqwest::Client::new()
         .post("https://api.openai.com/v1/chat/completions")
@@ -104,15 +120,14 @@ pub async fn post_message(chat_id: &str,
                     .map_err(|e| ServerError::Deserialize { msg: e.to_string() })?
                     .choices;
 
-                let message_chunk = MessageChunk {
+                let message_chunk = ResponseChunk {
+                    message_id,
+                    id:        response_id,
                     diff:      choice.delta.content.unwrap_or_else(String::new),
                     finish_by: choice.finish_reason,
                 };
 
-                response_buffer.push(&message_chunk.diff);
-                if let Some(reason) = message_chunk.finish_by {
-                    response_buffer.finish(reason)
-                }
+                response_buffer.push(&message_chunk);
 
                 Ok(message_chunk)
             }
@@ -121,23 +136,17 @@ pub async fn post_message(chat_id: &str,
 
     ctx.wait_until({
         let response_buffer = response_buffer.clone();
-        let chat_id: String = chat_id.into();
 
         async move {
             let (content, finish_reason) = response_buffer.complete().await;
             if let Err(err) = b.DB
-                .prepare("
-                    INSERT INTO messages (
-                        chat_id, role_id, content, finish_reason_id
-                    ) VALUES (
-                        ?1,      ?2,      ?3,      ?4
-                    )
-                ")
+                .prepare(
+                    "UPDATE messages SET content = ?1, finish_reason_id = ?2
+                    WHERE id = ?3")
                 .bind(&[
-                    chat_id.into(),
-                    openai::Role::assistant.as_id().into(),
                     content.into(),
                     finish_reason.as_id().into(),
+                    response_id.into(),
                 ]).unwrap()
                 .run().await
             {

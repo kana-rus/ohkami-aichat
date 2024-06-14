@@ -1,8 +1,13 @@
 pub mod openai;
 
-use ohkami::typed::Payload;
+use ohkami::typed::{Payload, Query};
 use ohkami::builtin::payload::{JSON, Text};
 
+
+#[derive(ohkami::serde::Deserialize, Debug)]
+pub struct IDObject {
+    pub id: usize,
+}
 
 #[Payload(JSON/SD)]
 pub struct Chat {
@@ -41,6 +46,11 @@ pub struct CreateChat {
     pub system_instruction: Option<String>,
 }
 
+#[Query]
+pub struct LoadMessagesQuery {
+    pub branch: usize,
+}
+
 #[Payload(JSON/SD)]
 pub struct PostMessage {
     pub content: String,
@@ -74,23 +84,21 @@ const _: () = {
 };
 
 #[derive(ohkami::serde::Serialize)]
-pub enum MessageChunk_ {
-    ID(usize),
-    Diff(String),
-    Finish(openai::ChatCompletionFinishReason),
+pub struct ResponseChunk {
+    pub id:         usize,
+    pub message_id: usize,
+    pub diff:       String,
+    pub finish_by:  Option<openai::ChatCompletionFinishReason>,
 }
-#[derive(ohkami::serde::Serialize)]
-pub struct MessageChunk {
-    pub diff:      String,
-    pub finish_by: Option<openai::ChatCompletionFinishReason>,
-}
-impl Into<String> for MessageChunk {
-    #[inline(always)]
-    fn into(self) -> String {
-        unsafe {// see serde_json::to_string
-            String::from_utf8_unchecked(
-                <JSON as ohkami::typed::PayloadType>::bytes(&self.diff).unwrap()
-            )
+const _: () = {
+    impl Into<String> for ResponseChunk {
+        #[inline(always)]
+        fn into(self) -> String {
+            unsafe {/* see serde_json::to_string */
+                String::from_utf8_unchecked(
+                    <JSON as ohkami::typed::PayloadType>::bytes(&self).unwrap()
+                )
+            }
         }
     }
-}
+};

@@ -1,42 +1,21 @@
-# Worker Yew SPA
+# Ohkami AI Chat
 
-## Prerequisites
+An AI Chat app for personal or shared use
 
-- Latest Rust toolchain with `wasm32-unknown-unknown` target
-- npm
-- `trunk` CLI ( installable by `cargo install trunk` )
+- Built with [Ohkami](https://github.com/kana-rus/ohkami) and [Yew](https://github.com/yewstack/yew)
+- Served on Cloudflare Workers
 
-In addition, `wasm-opt` is recommended to be installed.
+This app is for
 
-See https://github.com/kana-rus/ohkami-yew-todo for a working example!
+- Single user
+- A few users sharing their conversations with AI
 
-## Setup
+and expected to be served behind the access control by [Cloudflare Access](https://www.cloudflare.com/ja-jp/zero-trust/products/access).
 
-```sh
-npm create cloudflare ./path/to/project-dir -- --template https://github.com/kana-rus/ohkami-templates/worker_yew_spa
-```
-```sh
-cd ./path/to/project-dir
-```
-```sh
-npx wrangler login
-```
+## Supported models
 
-If you push the project to your GitHub repo, **You should add `wrangler.toml` into .gitignore**！
+- GPT-4o
 
-## Local dev
+## Depolyment
 
-```sh
-npm run dev
-```
-```sh
-trunk serve --watch src/ui --open
-```
-
-## Publish
-
-```sh
-npm run deploy
-```
-
-If you register your workers.dev subdomain at this time, it takes some minutes for DNS records to update and it's good time to take a coffee break.
+( TODO )

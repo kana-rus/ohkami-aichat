@@ -1,4 +1,4 @@
-use crate::models::openai;
+use crate::models::{openai, ResponseChunk};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
@@ -20,11 +20,10 @@ impl ChatResponseBuffer {
         })))
     }
 
-    pub fn push(&self, diff: &str) {
-        self.0.lock().unwrap().text.push_str(diff)
-    }
-    pub fn finish(&self, reason: openai::ChatCompletionFinishReason) {
-        self.0.lock().unwrap().finish_by = Some(reason)
+    pub fn push(&self, chunk: &ResponseChunk) {
+        let this = &mut self.0.lock().unwrap();
+        this.text.push_str(&chunk.diff);
+        this.finish_by = chunk.finish_by;
     }
 
     pub async fn complete(self) -> (String, openai::ChatCompletionFinishReason) {

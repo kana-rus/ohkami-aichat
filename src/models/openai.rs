@@ -55,7 +55,8 @@ const _: () = {
         pub fn into_raw(&self) -> Result<String, impl ser::Error + '_> {
             JSON::bytes(self)
                 .and_then(|bytes| String::from_utf8(bytes)
-                    .map_err(|e| ser::Error::custom(e.to_string())))
+                    .map_err(|e| ser::Error::custom(e.to_string()))
+                )
         }
     }
 };
