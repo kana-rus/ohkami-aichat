@@ -94,28 +94,26 @@ pub async fn post_message(chat_id: &str,
 
     let response_buffer = utils::ChatResponseBuffer::new();
 
-    let stream = DataStream::from_stream(
-        gpt_response.map({
-            let response_buffer = response_buffer.clone();
+    let stream = DataStream::from_stream(gpt_response.map({
+        let response_buffer = response_buffer.clone();
 
-            move |chunk| {
-                let [choice] = openai::ChatCompletionChunk::from_raw(&chunk?)
-                    .map_err(|e| ServerError::Deserialize { msg: e.to_string() })?
-                    .choices;
+        move |chunk| {
+            let [choice] = openai::ChatCompletionChunk::from_raw(&chunk?)
+                .map_err(|e| ServerError::Deserialize { msg: e.to_string() })?
+                .choices;
 
-                let message_chunk = ResponseChunk {
-                    message_id,
-                    response_id,
-                    diff:      choice.delta.content.unwrap_or_else(String::new),
-                    finish_by: choice.finish_reason,
-                };
+            let message_chunk = ResponseChunk {
+                message_id,
+                response_id,
+                diff:      choice.delta.content.unwrap_or_else(String::new),
+                finish_by: choice.finish_reason,
+            };
 
-                response_buffer.push(&message_chunk);
+            response_buffer.push(&message_chunk);
 
-                Ok(message_chunk)
-            }
-        })
-    );
+            Ok(message_chunk)
+        }
+    }));
 
     ctx.wait_until({
         let response_buffer = response_buffer.clone();
