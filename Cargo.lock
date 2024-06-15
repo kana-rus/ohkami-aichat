@@ -1163,7 +1163,7 @@ dependencies = [
 [[package]]
 name = "ohkami"
 version = "0.19.0"
-source = "git+https://github.com/kana-rus/ohkami.git#3c620167055a4c584d632320c45442f7756edf61"
+source = "git+https://github.com/kana-rus/ohkami.git#3dfd0f56b8c6a5ae4767ba2ee2f82d463577c43d"
 dependencies = [
  "byte_reader",
  "hmac",
@@ -1193,7 +1193,7 @@ dependencies = [
 [[package]]
 name = "ohkami_lib"
 version = "0.2.4"
-source = "git+https://github.com/kana-rus/ohkami.git#3c620167055a4c584d632320c45442f7756edf61"
+source = "git+https://github.com/kana-rus/ohkami.git#3dfd0f56b8c6a5ae4767ba2ee2f82d463577c43d"
 dependencies = [
  "byte_reader",
  "futures-core",
@@ -1204,7 +1204,7 @@ dependencies = [
 [[package]]
 name = "ohkami_macros"
 version = "0.7.4"
-source = "git+https://github.com/kana-rus/ohkami.git#3c620167055a4c584d632320c45442f7756edf61"
+source = "git+https://github.com/kana-rus/ohkami.git#3dfd0f56b8c6a5ae4767ba2ee2f82d463577c43d"
 dependencies = [
  "proc-macro2",
  "quote",

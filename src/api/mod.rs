@@ -1,11 +1,11 @@
-pub mod errors;
-pub mod utils;
+mod repository;
+mod errors;
+mod utils;
 
 use errors::ServerError;
 use crate::Bindings;
 use crate::models::{openai, IDObject, Chat, CreateChat, Message, ResponseChunk, PostMessage, SetTitle, LoadMessagesQuery};
 use ohkami::typed::{status, DataStream};
-use ohkami::serde::Deserialize;
 use ohkami::utils::StreamExt;
 use web_sys::{js_sys, wasm_bindgen::JsCast, WorkerGlobalScope};
 
@@ -52,9 +52,8 @@ pub async fn load_messages(chat_id: &str,
     b: Bindings,
     q: Option<LoadMessagesQuery>,
 ) -> Result<Vec<Message>, ServerError> {
-    // let messages = Message::load_all(chat_id, &b.DB).await?;
-    // Ok(messages)
-    todo!()
+    let messages = b.repository().load_messages_of(chat_id, q).await?;
+    Ok(messages)
 }
 
 #[worker::send]
@@ -72,26 +71,12 @@ pub async fn set_title(chat_id: &str,
 #[worker::send]
 pub async fn post_message(chat_id: &str,
     b: Bindings,
+    q: Option<LoadMessagesQuery>,
     req: PostMessage,
     ctx: &worker::Context,
 ) -> Result<DataStream<ResponseChunk, ServerError>, ServerError> {
-    let [message_id, response_id] = {
-        let ids = b.DB
-            .prepare(
-                "INSERT INTO messages (chat_id, role_id, content)
-                VALUES (?1, ?2, ?3), (?4, ?5, ?6)
-                RETURNING id")
-            .bind(&[
-                chat_id.into(), openai::Role::user.as_id().into(), req.content.into(),
-                chat_id.into(), openai::Role::assistant.as_id().into(), "".into()
-            ])?
-            .all().await?.results::<IDObject>()?;
-
-        let mut ids = TryInto::<[IDObject; 2]>::try_into(ids).unwrap()
-            .map(|IDObject { id }| id);
-        ids.sort();
-        ids
-    };
+    let [message_id, response_id] = b.repository()
+        .insert_message_response_pair(chat_id, req.content, String::new()).await?;
 
     let gpt_response = reqwest::Client::new()
         .post("https://api.openai.com/v1/chat/completions")
@@ -99,11 +84,9 @@ pub async fn post_message(chat_id: &str,
         .json(&openai::ChatCompletions {
             model:    "gpt-4o",
             stream:   true,
-            messages: Message::load_all(chat_id, &b.DB).await?.into_iter()
-                .map(|m| openai::ChatMessage {
-                    role:    m.role,
-                    content: m.content,
-                })
+            messages: b.repository().load_messages_of(chat_id, q).await?
+                .into_iter()
+                .map(|m| openai::ChatMessage { role: m.role, content: m.content })
                 .collect(),
         })
         .send().await?
@@ -122,7 +105,7 @@ pub async fn post_message(chat_id: &str,
 
                 let message_chunk = ResponseChunk {
                     message_id,
-                    id:        response_id,
+                    response_id,
                     diff:      choice.delta.content.unwrap_or_else(String::new),
                     finish_by: choice.finish_reason,
                 };
