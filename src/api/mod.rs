@@ -4,7 +4,7 @@ mod utils;
 
 use errors::ServerError;
 use crate::Bindings;
-use crate::models::{openai, IDObject, Chat, CreateChat, Message, ResponseChunk, PostMessage, SetTitle, LoadMessagesQuery};
+use crate::models::{openai, BranchID, Chat, CreateChat, IDObject, LoadMessagesQuery, Message, PostMessage, ResponseChunk, SetTitle};
 use ohkami::typed::{status, DataStream};
 use ohkami::utils::StreamExt;
 use web_sys::{js_sys, wasm_bindgen::JsCast, WorkerGlobalScope};
@@ -69,14 +69,13 @@ pub async fn set_title(chat_id: &str,
 }
 
 #[worker::send]
-pub async fn post_message(chat_id: &str,
+pub async fn post_message((chat_id, branch): (&str, BranchID),
     b: Bindings,
-    q: Option<LoadMessagesQuery>,
     req: PostMessage,
     ctx: &worker::Context,
 ) -> Result<DataStream<ResponseChunk, ServerError>, ServerError> {
-    let [message_id, response_id] = b.repository()
-        .insert_message_response_pair(chat_id, req.content, String::new()).await?;
+    let (message_id, response_id) = b.repository()
+        .insert_message_response_pair_of(chat_id, req.content, String::new()).await?;
 
     let gpt_response = reqwest::Client::new()
         .post("https://api.openai.com/v1/chat/completions")
@@ -102,16 +101,16 @@ pub async fn post_message(chat_id: &str,
                 .map_err(|e| ServerError::Deserialize { msg: e.to_string() })?
                 .choices;
 
-            let message_chunk = ResponseChunk {
+            let response_chunk = ResponseChunk {
                 message_id,
                 response_id,
                 diff:      choice.delta.content.unwrap_or_else(String::new),
                 finish_by: choice.finish_reason,
             };
 
-            response_buffer.push(&message_chunk);
+            response_buffer.push(&response_chunk);
 
-            Ok(message_chunk)
+            Ok(response_chunk)
         }
     }));
 

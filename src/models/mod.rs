@@ -1,10 +1,11 @@
 pub mod openai;
 
+use ohkami::serde::{Serialize, Deserialize};
 use ohkami::typed::{Payload, Query};
 use ohkami::builtin::payload::{JSON, Text};
 
 
-#[derive(ohkami::serde::Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct IDObject {
     pub id: usize,
 }
@@ -30,7 +31,7 @@ pub struct CreateChat {
 
 #[Query]
 pub struct LoadMessagesQuery {
-    pub branch: usize,
+    pub branch: BranchID,
 }
 
 #[Payload(JSON/SD)]
@@ -44,28 +45,49 @@ pub struct SetTitle(pub String);
 pub struct BranchID([u8; 6]);
 const _: () = {
     impl BranchID {
+        #[inline]
         pub fn new() -> Self {
             use web_sys::{js_sys, wasm_bindgen::JsCast, WorkerGlobalScope};
             
             let mut bytes = <[u8; 6]>::default();
             WorkerGlobalScope::unchecked_from_js(js_sys::global().into())
                 .crypto().unwrap()
-                .get_random_values_with_u8_array(&mut bytes).unwrap();
-        
+                .get_random_values_with_u8_array(&mut bytes).unwrap();        
             Self(bytes)
         }
-    }
-
-    impl std::ops::Deref for BranchID {
-        type Target = str;
-        fn deref(&self) -> &Self::Target {
-            /* SAFETY: UUID consists of asciis */
+        #[inline]
+        pub const fn as_str(&self) -> &str {
             unsafe {std::str::from_utf8_unchecked(&self.0)}
         }
     }
+    impl From<&str> for BranchID {
+        #[inline]
+        fn from(s: &str) -> Self {
+            ohkami::FromParam::from_param(s.into()).unwrap()
+        }
+    }
 };
+impl<'de> Deserialize<'de> for BranchID {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where D: ohkami::serde::Deserializer<'de> {
+        let str = <&'de str>::deserialize(deserializer)?;
+        ohkami::FromParam::from_param(str.into())
+            .map_err(|e: ohkami::Response| ohkami::serde::de::Error::custom(
+                String::from_utf8_lossy(e.payload().unwrap())
+            ))
+    }
+}
+impl<'req> ohkami::FromParam<'req> for BranchID {
+    type Error = ohkami::Response;
+    #[inline]
+    fn from_param(param: std::borrow::Cow<'req, str>) -> Result<Self, Self::Error> {
+        (param.len() == 6)
+            .then(|| Self(param.as_bytes().try_into().unwrap()))
+            .ok_or_else(|| ohkami::Response::BadRequest().with_text(format!("Inlvaid branch id: `{param}`")))
+    }
+}
 
-#[derive(ohkami::serde::Serialize)]
+#[derive(Serialize)]
 pub struct ResponseChunk {
     pub message_id:  usize,
     pub response_id: usize,

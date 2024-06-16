@@ -24,10 +24,11 @@ async fn my_worker() -> Ohkami {
             .GET(api::list_chats)
             .POST(api::create_chat),
         "/chats/:chat_id"
-            .GET(api::load_messages)
-            .POST(api::post_message)
             .PATCH(api::set_title),
-        "/chats/:chat_id/regenerate"
+        "/chats/:chat_id/:branch"
+            .GET(api::load_messages)
+            .POST(api::post_message),
+        "/chats/:chat_id/:branch/regenerate"
             .GET(api::regenerate_response),
         "/messages/:message_id"
             .PUT(api::create_new_branch),

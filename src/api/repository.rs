@@ -1,4 +1,4 @@
-use crate::models::{openai, IDObject, LoadMessagesQuery, Message};
+use crate::models::{openai, BranchID, IDObject, LoadMessagesQuery, Message};
 use super::ServerError;
 
 
@@ -33,7 +33,7 @@ impl Repository<'_> {
                 let Some((_, latest_branch)) = branches.rsplit_once(':')
                 else {return Ok(vec![])};
 
-                latest_branch.parse().unwrap()
+                latest_branch.into()
             }
         };
 
@@ -49,7 +49,7 @@ impl Repository<'_> {
                 ")
                 .bind(&[
                     chat_id.into(),
-                    branch.into()
+                    branch.as_str().into(),
                 ])?
                 .all().await?.results::<MessageRecord>()?
         };
@@ -61,26 +61,28 @@ impl Repository<'_> {
         }).collect())
     }
 
-    pub async fn insert_message_response_pair(&self,
+    pub async fn insert_message_response_pair_of(&self,
         chat_id:  &str,
+        branch:   BranchID,
         message:  String,
         response: String,
-    ) -> Result<[usize; 2], ServerError> {
+    ) -> Result<(usize, usize), ServerError> {
         let ids = self.0
             .prepare(
-                "INSERT INTO messages (chat_id, role_id, content)
-                VALUES (?1, ?2, ?3), (?4, ?5, ?6)
+                "INSERT INTO messages (chat_id, branches, role_id, content)
+                VALUES (?1, ?2, ?3, ?4), (?5, ?6, ?7, ?8)
                 RETURNING id")
             .bind(&[
-                chat_id.into(), openai::Role::user.as_id().into(), message.into(),
-                chat_id.into(), openai::Role::assistant.as_id().into(), response.into()
+                chat_id.into(), branch.as_str().into(), openai::Role::user.as_id().into(), message.into(),
+                chat_id.into(), branch.as_str().into(), openai::Role::assistant.as_id().into(), response.into()
             ])?
             .all().await?.results::<IDObject>()?;
 
         let mut ids = TryInto::<[IDObject; 2]>::try_into(ids).unwrap()
             .map(|IDObject { id }| id);
         ids.sort();
-        
-        Ok(ids)
+
+        let [message_id, response_id] = ids;
+        Ok((message_id, response_id))
     }
 }
