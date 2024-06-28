@@ -36,27 +36,16 @@ pub enum ChatCompletionFinishReason {
     content_filter,
 }
 const _: () = {
+    impl Into<String> for ChatCompletionChunk {
+        #[inline]
+        fn into(self) -> String {
+            ohkami::serde::json::to_string(&self).unwrap()
+        }
+    }
+
     impl ChatCompletionFinishReason {
         pub const fn as_id(self) -> u8 {
             self as _
-        }
-    }
-};
-const _: () = {
-    use ohkami::serde::{ser, de};
-    use ohkami::typed::PayloadType as _;
-
-    impl ChatCompletionChunk {
-        #[inline]
-        pub fn from_raw(chunk: &[u8]) -> Result<Self, impl de::Error + '_> {
-            JSON::parse(chunk)
-        }
-        #[inline]
-        pub fn into_raw(&self) -> Result<String, impl ser::Error + '_> {
-            JSON::bytes(self)
-                .and_then(|bytes| String::from_utf8(bytes)
-                    .map_err(|e| ser::Error::custom(e.to_string()))
-                )
         }
     }
 };
